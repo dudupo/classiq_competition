@@ -4,6 +4,7 @@ from math import ceil
 import numpy as np
 
 from qiskit import ClassicalRegister, QuantumCircuit
+from qiskit.circuit.library import SXdgGate
 from qiskit.visualization import circuit_drawer
 from matplotlib import pyplot as plt
 from random import randint
@@ -19,7 +20,7 @@ from requests import delete
 
 
 WIRES = 10
-TEST  = "NOT" #"PRODUCT"
+TEST  = "NOT" #PRODUCT" #NOT" #"PRODUCT"
 PATHFILE =  { 
     "NOT" : "./LiH",
     "YES" : "./LiH_test",
@@ -36,6 +37,7 @@ class local_Hamiltonian():
     def __init__(self, tensor, weight) -> None:
         self.tensor = tensor
         self.weight = weight
+        self.parent = self
     
     def tensorspace(self, other) -> bool:
         for A,B in zip( list(self.tensor), list(other.tensor)):
@@ -43,6 +45,59 @@ class local_Hamiltonian():
             if "I" not in [A, B]:
                 return False 
         return True
+
+    def dis(self, other) -> int:
+        ret = 1
+        for A,B in zip(list(self.tensor), list(other.tensor)):
+            if "I" not in [A, B] and A != B:
+                ret += 1
+        return ret
+    
+    def solid_product(self, other):
+        indices = []
+        for j in range(WIRES):
+            l="XXXXX" * j + "IIIII" * (WIRES-j)
+            r = reversed(l)
+            if local_Hamiltonian(l,0).tensorspace(self) and\
+                local_Hamiltonian(r,0).tensorspace(other):
+                indices.append(j)
+        
+        if len(indices) > 0:
+            return True, indices 
+        return False, []
+    
+    def newbase(self, perm):
+        tensor = [ "" ] * len(self.tensor)
+        for i in range(len(perm)):
+            tensor[i] = self.tensor[perm[i]]
+        ret = local_Hamiltonian(tensor,self.weight)
+        ret.parent = self.parent
+        return ret
+
+class SWAPlocal_Hamiltonian(local_Hamiltonian):
+    def __init__(self, permutation) -> None:
+        super().__init__("W" * WIRES, 0)
+        self.permutation =  permutation
+    
+    
+    def SWAP(self, circuit):    
+        def _SWAP(i,j):
+            circuit.cx(i,j)
+            circuit.cx(j,i)
+            circuit.cx(i,j)
+            circuit.h(i)
+            circuit.h(j)
+            circuit.cx(i,j)
+            circuit.cx(j,i)
+            circuit.cx(i,j)
+            circuit.h(i)
+            circuit.h(j)
+        
+        color = set()
+        for i in range(WIRES):
+            if i not in color and i != self.permutation[i]:
+                color.add( self.permutation[i] )
+                _SWAP(i,self.permutation[i])
 
 def parser_line(line) -> local_Hamiltonian:
     line  = line.split()
@@ -86,8 +141,12 @@ def unrotateY(cir):
         cir.sdg(wire)
     return _func
 
-def MulByterm(circuit : QuantumCircuit, term, main_wire = WIRES-1, sign=1) -> QuantumCircuit:
+def MulByterm(circuit : QuantumCircuit, term, next_term= local_Hamiltonian("IIIIIIIII", 0).tensor\
+    ,next_main_wires = [] , main_wire = WIRES-1, sign=1) -> QuantumCircuit:
         
+    # def next_not_trivial_term(operator, next_terms, index):
+        # for term in next
+
     def reqursive_manner(tensor, wire, weight):
         
         if wire == main_wire:
@@ -117,11 +176,20 @@ def MulByterm(circuit : QuantumCircuit, term, main_wire = WIRES-1, sign=1) -> Qu
         
         reqursive_manner(tensor, (wire + sign) % WIRES, weight)
         
-        if pauli != "I":
+        # main_wire == next_main
+        if (pauli != "I"):
+            if ( (len(next_main_wires) > 0) and\
+                 (next_term[wire] == pauli) and\
+                  (next_main_wires[wire] == main_wire)):
+                return
+            #      and next_term[wire] != pauli:
+            
             circuit.cx(wire, main_wire)
-            uncompute[pauli](circuit)(wire)
-         
-    
+            if next_term[wire] != pauli: 
+                uncompute[pauli](circuit)(wire)
+            # else:
+                # circuit.cx(wire, next_main_wires[wire])
+
     reqursive_manner(term.tensor, (main_wire + sign) % WIRES, term.weight)
     return circuit
 
@@ -139,7 +207,8 @@ def cutting(circuit : QuantumCircuit):
         "cx" : "?",
         "rz" : "?" ,
         "s"  : "sdg",
-        "sdg" : "s" }
+        "sdg" : "s",
+        "sxdg" :"?" }
 
     
 
@@ -179,10 +248,12 @@ def support_edge(loacl_hamiltonain : local_Hamiltonian, reverse = False):
 def genreate_circut(terms = None):
     circuit = QuantumCircuit(10)
     terms = parser() if terms == None else terms
-    
-    
+    print(len(terms))
     for i, term in enumerate(terms):
-        
+        if isinstance(term, SWAPlocal_Hamiltonian):
+            term.SWAP(circuit)
+            continue
+
         sign =   { 
                 0 : 1,
                 1 : -1,
@@ -201,38 +272,54 @@ def genreate_circut(terms = None):
                     3 : -1
                 }[i % 4]  #if "STRATEGY" == "HIURISTIC" else 1
 
-            reverse = { 
+        reverse_f = (lambda _i : { 
                     0 : True,
                     1 : True,
                     2 : False,
                     3 : False
-                }[i % 4]
-
-        main_wire = {
+                }[_i % 4])
+        
+        reverse = reverse_f(i)
+        main_wire_f = (lambda _term, _reverse : {
             "NON"       : lambda :  WIRES - 1,
             "RANDOM"    : lambda :  randint(0, WIRES - 1),
-            "HIURISTIC" : lambda : support_edge(term, reverse=reverse),
-            "PRODUCT"   : lambda : support_edge(term, reverse=reverse)
-        }[STRATEGY]()
-
-        MulByterm(circuit, term, main_wire, sign=sign) 
+            "HIURISTIC" : lambda : support_edge(_term, reverse=_reverse),
+            "PRODUCT"   : lambda : support_edge(_term, reverse=_reverse)
+        }[STRATEGY]()) 
+        main_wire = main_wire_f(term, reverse)
+        next_term = ["I"] *10 # local_Hamiltonian("IIIIIIIIII",0).tensor        
+        
+        def next_operator_for_wire(termlist, wire, current_wire=0):
+            for _j , other in enumerate(termlist):
+                if other.tensor[wire] != "I":
+                    return other.tensor[wire], main_wire_f(other, reverse_f(_j + i)) 
+            return "I", 0
+        
+        next_main_wires = [0] * 10
+        if (i+1) < len(terms):
+            for j in range(WIRES):
+                next_term[j], next_main_wires[j] = next_operator_for_wire(terms[i+1:], j)
+        
+        MulByterm(circuit, term, main_wire=main_wire,
+         next_term=next_term, next_main_wires=next_main_wires ,sign=sign) 
 
     return  circuit
 
-def genreate_optimzed_circut(circuit, terms):
+def genreate_optimzed_circut(circuit, terms, svg =False):
     # circuit = genreate_circut(terms)
     circuit = cutting(cutting(circuit))
     
-    for _ in range(ceil(np.log(N))):
-        circuit = circuit.compose(circuit)
-    circuit = cutting(circuit)
+    # for _ in range(ceil(np.log(N))):
+    #     circuit = circuit.compose(circuit)
+    # circuit = cutting(circuit)
 
     circuit_drawer(circuit, output='mpl',style="bw", fold=-1)
     plt.title( f"TERMS: {len(terms)}, DEPTH:{circuit.depth()}")
-    plt.savefig(f'Ham_{STRATEGY}-{datetime.datetime.now()}.svg')
-    open(f"Ham_{STRATEGY}-{datetime.datetime.now()}.qasm", "w+").write(circuit.qasm())
+    if svg:
+        plt.savefig(f'Ham_{STRATEGY}-{datetime.datetime.now()}.svg')
+        open(f"Ham_{STRATEGY}-{datetime.datetime.now()}.qasm", "w+").write(circuit.qasm())
     print(f"TERMS: {len(terms)}, DEPTH:{circuit.depth()}")
-
+    return circuit.depth()
 
 
 class Node():
@@ -337,16 +424,103 @@ def decompiseToAlternatePath(Graph):
         normalpath.append(v.local_hamiltonian)            
     return alternate_paths, normalpath
 
-if __name__  == "__main__":
-    # genreate_circut()
+
+
+
+def plotSWAP():
+    circuit = QuantumCircuit(10)
+    
+    def SWAP(i,j):
+        circuit.cx(i,j)
+        circuit.cx(j,i)
+        circuit.cx(i,j)
+        circuit.h(i)
+        circuit.h(j)
+        circuit.cx(i,j)
+        circuit.cx(j,i)
+        circuit.cx(i,j)
+        circuit.h(i)
+        circuit.h(j)
+
+    SWAP(0,7)
+    SWAP(2,8)
+    SWAP(4,6)
+
+    circuit_drawer(circuit, output='mpl',style="bw", fold=-1)
+    plt.title( f"SWAP [0,2,4]->[7,8,6] Gate")
+    plt.savefig(f'SWAPExample.svg')
+
+
+from Graph import extract_circuit, product_graph
+import networkx as nx
+from itertools import product
+
+
+
+
+
+
+def genHamiltonainGraph():
     from random import sample
     terms = sample(parser(), 30)
-    alternate_paths, normalpath = decompiseToAlternatePath(generateGraph(terms))
-    print(f"length of alternate_paths {len(alternate_paths)}")
-    STRATEGY = "PRODUCT"
-    circuit_product = genreate_circut(alternate_paths)
-    STRATEGY = "HIURISTIC"
-    circuit_steps   = genreate_circut(normalpath)
-    STRATEGY = "PRODUCT|HIURISTIC"
-    genreate_optimzed_circut(circuit_product.compose(circuit_steps),\
-         alternate_paths + normalpath )
+    G = nx.Graph()    
+    
+
+    
+    for term in terms:
+        G.add_node(term)
+
+    for lterm, rterm in product(terms,terms):
+        if lterm != rterm:
+            G.add_edge(lterm,rterm)
+            G.edges[lterm,rterm]["weight"] = lterm.dis(rterm)
+
+    
+    PERMUTATIONS = [
+        [0,1,2,3,4,5,6,7,8,9],
+        [0,2,4,6,8,1,3,5,7,9],
+        [0,1,2,5,6,3,4,7,8,9]
+    ]
+
+    def weight_function(g : int,v : local_Hamiltonian,h : int,u :local_Hamiltonian) -> int:
+        if g == h:
+            return v.dis(u)
+        else:
+            return v.newbase(PERMUTATIONS[g]).dis(\
+                u.newbase(PERMUTATIONS[h])) + 5
+
+    group = [0,1,2] 
+    G = product_graph(G, group, weight_function)
+    Path = extract_circuit(G)
+    print(Path)
+
+
+
+# from Graph_product_space import alternate_path_v2
+
+if __name__  == "__main__":
+    
+    # circuit = QuantumCircuit(10) 
+    circuit, terms = genreate_circut(alternate_path_v2())
+    genreate_optimzed_circut(circuit, terms)
+    # for 
+    
+    
+    # plotSWAP()
+    # exit(0)
+
+    # genHamiltonainGraph()
+
+
+    # genreate_circut()
+    # from random import sample
+    # terms = sample(parser(), 30)
+    # alternate_paths, normalpath = decompiseToAlternatePath(generateGraph(terms))
+    # print(f"length of alternate_paths {len(alternate_paths)}")
+    # STRATEGY = "PRODUCT"
+    # circuit_product = genreate_circut(alternate_paths)
+    # STRATEGY = "HIURISTIC"
+    # circuit_steps   = genreate_circut(normalpath)
+    # STRATEGY = "PRODUCT|HIURISTIC"
+    # genreate_optimzed_circut(circuit_product.compose(circuit_steps),\
+    #      alternate_paths + normalpath )
