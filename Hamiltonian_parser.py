@@ -55,8 +55,8 @@ class local_Hamiltonian():
     
     def solid_product(self, other):
         indices = []
-        for j in range(WIRES):
-            l="XXXXX" * j + "IIIII" * (WIRES-j)
+        for j in range(1,WIRES):
+            l="X" * j + "I" * (WIRES-j)
             r = reversed(l)
             if local_Hamiltonian(l,0).tensorspace(self) and\
                 local_Hamiltonian(r,0).tensorspace(other):
@@ -267,10 +267,10 @@ def genreate_circut(terms = None):
         if "STRATEGY" == "PRODUCT":
             sign =   { 
                     0 : 1,
-                    1 : 1,
-                    2 : -1,
-                    3 : -1
-                }[i % 4]  #if "STRATEGY" == "HIURISTIC" else 1
+                    1 : 1
+                    # 2 : -1,
+                    # 3 : -1
+                }[sign % 2]  #if "STRATEGY" == "HIURISTIC" else 1
 
         reverse_f = (lambda _i : { 
                     0 : True,
