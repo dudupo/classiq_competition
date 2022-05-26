@@ -30,7 +30,7 @@ RANDOMSTACTICS = True
 STRATEGY =  "PRODUCT" #"HIURISTIC" #,"RANDOM" ,"NON"
 
 # the number of products (N plays the role of n-> \infity)
-N = 1
+N = 4
 
 
 class local_Hamiltonian():
@@ -305,19 +305,23 @@ def genreate_circut(terms = None):
 
     return  circuit
 
-def genreate_optimzed_circut(circuit, terms, svg =False):
+def genreate_optimzed_circut(circuit, terms, svg =False, entire = False):
     # circuit = genreate_circut(terms)
     circuit = cutting(cutting(circuit))
     
-    # for _ in range(ceil(np.log(N))):
-    #     circuit = circuit.compose(circuit)
-    # circuit = cutting(circuit)
+    if entire:
+        for _ in range(ceil(np.log(N))):
+            circuit = circuit.compose(circuit)
+        circuit = cutting(circuit)
 
     circuit_drawer(circuit, output='mpl',style="bw", fold=-1)
     plt.title( f"TERMS: {len(terms)}, DEPTH:{circuit.depth()}")
     if svg:
         plt.savefig(f'Ham_{STRATEGY}-{datetime.datetime.now()}.svg')
+    
+    if entire:
         open(f"Ham_{STRATEGY}-{datetime.datetime.now()}.qasm", "w+").write(circuit.qasm())
+    
     print(f"TERMS: {len(terms)}, DEPTH:{circuit.depth()}")
     return circuit.depth()
 

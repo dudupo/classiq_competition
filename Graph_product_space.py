@@ -1,3 +1,4 @@
+from copy import deepcopy
 from turtle import color
 import networkx as nx
 from numpy import argmin, average
@@ -21,8 +22,8 @@ class Permutation_Base():
 
 
 def generated_the_product_graph(num_of_terms=20):
-    terms =  parser() #sample(parser(), num_of_terms) #parser()# sample(parser(), num_of_terms)
-    def generated_the_product_graph_by_base(_terms):
+    terms = parser() #sample(parser(), num_of_terms) #parser()# sample(parser(), num_of_terms)
+    def generated_the_product_graph_by_base(_terms, number_premu=0):
         
         G        = nx.DiGraph()
         Gproduct = nx.Graph()
@@ -61,6 +62,7 @@ def generated_the_product_graph(num_of_terms=20):
                     Gproduct.edges[(H1, H2), (H3, H4)]['weight'] = 1
                 # if check_solid_edge(H1, H2, H3, H4):
                     Gproduct.edges[(H1, H2), (H3, H4)]['solid'] = True 
+                    Gproduct.edges[(H1, H2), (H3, H4)]["permutation"] = j
                 
         print("hi")
         # groups = [ [] for _ in range(10)]
@@ -69,7 +71,7 @@ def generated_the_product_graph(num_of_terms=20):
         
                 # G.add_node((H1, H2))
 
-        # print(f"vertices:{len(vertices)}\t edges: ~{G.number_of_edges()}")
+        print(f"vertices:{Gproduct.number_of_nodes()}\t edges: ~{Gproduct.number_of_edges()}")
 
         # time = datetime.now()
         # steps = []
@@ -91,7 +93,7 @@ def generated_the_product_graph(num_of_terms=20):
         return Gproduct, _terms 
     
 
-    # return pkl.load( open(f"mainG.pkl-40-1", "br"))
+    return pkl.load( open(f"mainG.pkl-276-1", "br"))
             
 
     permutations = list(map(lambda x: Permutation_Base(x) , [
@@ -105,25 +107,11 @@ def generated_the_product_graph(num_of_terms=20):
     for j, permutation in enumerate(permutations): 
         perm_terms = list(map( lambda x : x.newbase(permutation.arr), terms))
         # print(perm_terms)
-        G, _ = generated_the_product_graph_by_base(perm_terms) 
-        for e in G.edges:
-            G.edges[e]["permutation"] = j
+        G, _ = generated_the_product_graph_by_base(perm_terms, number_premu=j) 
         
         # graphs.append(G)
         mainG = nx.compose(mainG, G)
-            
-    #     # print(len(mainG.nodes))
 
-    # for l, ((G1,p1), (G2,p2)) in enumerate(product(zip(graphs,permutations)\
-    #      ,zip(graphs,permutations))):
-    #     if G1 != G2:
-    #         G.add_node( (p1,p2) )
-    #         G.add_edges_from([(node,(p1,p2), {'weight': 1}) for node in G1.nodes])
-    #         G.add_edges_from([((p1,p2),node,  {'weight': 0}) for node in G2.nodes])
-    # mainG, _ = generated_the_product_graph_by_base(mainG)
-    
-    # for e in mainG.edges:
-    #     print(mainG.edges[e]["permutation"])    
     pkl.dump((mainG, terms ,permutations), open(f"mainG.pkl-{len(terms)}-{len(permutations)}", "bw+"))
     return mainG, terms, permutations
 from random import shuffle, choice
@@ -137,7 +125,8 @@ def select(_list, v, G, flag = True):
     else:
         return []
 #randomized DFS.
-def sample_path(G, terms):
+def sample_path(G, terms) -> tuple((nx.Graph, set)):
+    print("sample_path")
     color = set()
     
     def DFS(v, T, _color, sign=0, flag =True):        
@@ -185,10 +174,66 @@ def sample_path(G, terms):
 
     return T, color
 
-def alternate_path_v2(G, terms, permutations):
-    T, color = sample_path(G, terms)
-    ret = []
+
+
+
+def get_Diameter(Tree: nx.Graph) -> tuple((tuple(([], int)),tuple(([], int)))) :
+
+    def DFS_tree_depth(G, v):
+        
+        if list(G.adj[v]):
+            return (([v],1),([v],1))
+        
+        branches = []
+
+        # deepcopy()
+
+        maxinnerpath, maxinnerdepth = [],0
+        for u in list(G.adj[v]):
+            ((temppath, tempdepth), \
+                (tempinnerpath, tempinnerdepth)) = DFS_tree_depth(G,u)
+            
+            if maxinnerdepth <  tempinnerdepth:
+                maxinnerpath, maxinnerdepth = tempinnerpath, tempinnerdepth
+            
+            branches.append(temppath, tempdepth)
+        
+        maxpath, maxdepth = [],0 
+        
+        for ((b1, d1),(b2, d2)) in product(branches,branches):
+            if 1 + d1 + d2 > maxinnerdepth:
+                maxinnerpath    =  b1 + [ v ] + b2 
+                maxinnerdepth   = 1 + d1 + d2        
+
+        for b,d in branches:
+            if 1 + d > maxdepth:
+                maxpath = [v] + b
+                maxdepth = 1 + d
+        return ((maxpath,maxdepth), (maxinnerpath, maxinnerdepth)) 
+    
+    ((maxpath,maxdepth), (maxinnerpath, maxinnerdepth)) = DFS_tree_depth(Tree, list(Tree.nodes)[0])
+    return maxpath if maxdepth > maxinnerdepth else maxinnerpath
+
+
+
+def alternate_path_v2(G : nx.Graph, terms, permutations):
+    
+    T, _ = sample_path(G, terms)
+    Q = get_Diameter(T)
     other_color = set()
+
+    ret = []
+    while (len(Q) > 0):
+        for (u,v) in Q:
+            for H in [u,v]:
+                if H.parent not in other_color:
+                    ret.append(H)
+                    other_color.add(H.parent)
+            G.remove_node((u,v))
+        T, _ = sample_path(G, terms)
+        Q = get_Diameter(T)
+
+
     last_base = None
     print(T.number_of_edges())
     for e in T.edges:
@@ -214,7 +259,7 @@ def alternate_path_v2(G, terms, permutations):
     return ret, terms
     #     print(e)
 
-
+    
 if __name__ == "__main__":
     # alternate_path_v2()
 
@@ -222,23 +267,23 @@ if __name__ == "__main__":
     # circuit = QuantumCircuit(10)
     G, terms, permus = generated_the_product_graph(num_of_terms=70) 
 
-    pos = nx.spring_layout(G, seed=50)
+    # pos = nx.spring_layout(G, seed=50)
 
-    nx.draw_networkx_nodes(G, pos)
-    nx.draw_networkx_edges(G, pos)
-    plt.show()
+    # nx.draw_networkx_nodes(G, pos)
+    # nx.draw_networkx_edges(G, pos)
+    # plt.show()
 
     for term in sorted(terms, key=lambda x : "".join(x.tensor)):
         print("".join(term.tensor))
     canidates = [ ]
     for _ in range(3):    
-        path, terms = alternate_path_v2(G, terms, permus)
+        path, terms = alternate_path_v2(deepcopy(G), terms, permus)
         circuit = genreate_circut(path)
         depth = genreate_optimzed_circut(circuit, terms)
         canidates.append( (depth, circuit) )
 
     depth, circuit =  min( canidates, key = lambda x : x[0] )
-    genreate_optimzed_circut(circuit, terms, svg = True)
+    genreate_optimzed_circut(circuit, terms, svg = False, entire=True)
     # terms = shuffle(terms)
     # T = nx.Graph()
     # for term in terms:
