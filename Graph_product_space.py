@@ -4,7 +4,7 @@ import networkx as nx
 from numpy import argmin, average
 from sympy import permutedims
 from Hamiltonian_parser import parser, local_Hamiltonian,genreate_circut,genreate_optimzed_circut,SWAPlocal_Hamiltonian
-from itertools import permutations, product
+from itertools import permutations, product, combinations
 
 from random import sample, shuffle
 from  tqdm import tqdm
@@ -25,7 +25,7 @@ def generated_the_product_graph(num_of_terms=20):
     terms = parser() #sample(parser(), num_of_terms) #parser()# sample(parser(), num_of_terms)
     def generated_the_product_graph_by_base(_terms, number_premu=0):
         
-        G        = nx.DiGraph()
+        G        = nx.Graph()
         Gproduct = nx.Graph()
 
         def check_solid_edge(H1, H2, H3, H4):
@@ -39,13 +39,13 @@ def generated_the_product_graph(num_of_terms=20):
                 return False, None 
         
         edges_set = set()
-        vertices = []
         print(len(_terms))
         for (H1, H2) in product(_terms, _terms):            
             for H in _terms:
-                if H1.tensorspace(H2):
+                if H1.solid_product(H2)[0]:
                     G.add_edge(H1, H2)
                     edges_set.add( (H1,H2) )
+                    edges_set.add( (H2,H1) )
             # if H1.tensorspace(H2):
             #     vertices.append((H1, H2))
         print("hi")
@@ -55,7 +55,7 @@ def generated_the_product_graph(num_of_terms=20):
                 product(list(G.adj[H1]),list(G.adj[H2])):  
                 if (H1,H4) in edges_set and\
                     (H3,H4) in edges_set and\
-                        (H3,H2) in edges_set:
+                        (H2,H3) in edges_set:
                     Gproduct.add_edge((H1,H2), (H3, H4))
 
                     # exist, cost = check_edge(H1, H2, H3, H4)
@@ -65,35 +65,11 @@ def generated_the_product_graph(num_of_terms=20):
                     Gproduct.edges[(H1, H2), (H3, H4)]["permutation"] = j
                 
         print("hi")
-        # groups = [ [] for _ in range(10)]
-
-
-        
-                # G.add_node((H1, H2))
-
         print(f"vertices:{Gproduct.number_of_nodes()}\t edges: ~{Gproduct.number_of_edges()}")
-
-        # time = datetime.now()
-        # steps = []
-        # for (_,((H1, H2), (H3, H4))) in enumerate( product(\
-        #     vertices,vertices)):
-        #     if (_ % 10**3 == 0) :
-        #         steps.append( ((datetime.now() - time) * (len(vertices)**2 - _ )).seconds )
-        #         print(f"{average(steps[-10:])}")
-        #         time = datetime.now()
-        #     exist, cost = check_edge(H1, H2, H3, H4)
-        #     if exist:
-        #         G.add_edge( (H1, H2), (H3, H4) )
-        #         G.edges[(H1, H2), (H3, H4)]['weight'] = cost
-        #         if check_solid_edge(H1, H2, H3, H4):
-        #             G.edges[(H1, H2), (H3, H4)]['solid'] = True 
-        #         else:
-        #             G.edges[(H1, H2), (H3, H4)]['solid'] = False
-        # print("return")
-        return Gproduct, _terms 
+        return Gproduct, _terms     
     
 
-    return pkl.load( open(f"mainG.pkl-276-1", "br"))
+    # return pkl.load( open(f"mainG.pkl-276-1", "br"))
             
 
     permutations = list(map(lambda x: Permutation_Base(x) , [
@@ -151,7 +127,7 @@ def sample_path(G, terms) -> tuple((nx.Graph, set)):
                 T.edges[v,u]['sign'] = sign
                 _color, sign = DFS(u, T, _color, sign=sign+1, flag=flag)
         return _color, sign
-    T = nx.Graph()
+    T = nx.DiGraph()
     l = []
 
     for v in G.nodes():
@@ -163,10 +139,10 @@ def sample_path(G, terms) -> tuple((nx.Graph, set)):
     _sign = 0
     for v in G.nodes(): 
         color, _sign = DFS(v, T, color, sign=_sign, flag=False)
-        if last_size == T.number_of_edges():
-            for u in [v[0], v[1]]:
-                if u.parent in color:
-                    color.remove(u.parent)
+        # if last_size == T.number_of_edges():
+        #     for u in [v[0], v[1]]:
+        #         if u.parent in color:
+        #             color.remove(u.parent)
 
         last_size = len(T.edges.values())
     # for v in G.nodes(): 
@@ -181,13 +157,10 @@ def get_Diameter(Tree: nx.Graph) -> tuple((tuple(([], int)),tuple(([], int)))) :
 
     def DFS_tree_depth(G, v):
         
-        if list(G.adj[v]):
+        if len(list(G.adj[v])) == 0 :
             return (([v],1),([v],1))
         
         branches = []
-
-        # deepcopy()
-
         maxinnerpath, maxinnerdepth = [],0
         for u in list(G.adj[v]):
             ((temppath, tempdepth), \
@@ -196,11 +169,11 @@ def get_Diameter(Tree: nx.Graph) -> tuple((tuple(([], int)),tuple(([], int)))) :
             if maxinnerdepth <  tempinnerdepth:
                 maxinnerpath, maxinnerdepth = tempinnerpath, tempinnerdepth
             
-            branches.append(temppath, tempdepth)
+            branches.append((temppath, tempdepth))
         
         maxpath, maxdepth = [],0 
         
-        for ((b1, d1),(b2, d2)) in product(branches,branches):
+        for (b1, d1),(b2, d2) in combinations(branches, r=2):
             if 1 + d1 + d2 > maxinnerdepth:
                 maxinnerpath    =  b1 + [ v ] + b2 
                 maxinnerdepth   = 1 + d1 + d2        
@@ -212,6 +185,7 @@ def get_Diameter(Tree: nx.Graph) -> tuple((tuple(([], int)),tuple(([], int)))) :
         return ((maxpath,maxdepth), (maxinnerpath, maxinnerdepth)) 
     
     ((maxpath,maxdepth), (maxinnerpath, maxinnerdepth)) = DFS_tree_depth(Tree, list(Tree.nodes)[0])
+    print(maxdepth, maxinnerdepth)
     return maxpath if maxdepth > maxinnerdepth else maxinnerpath
 
 
@@ -223,16 +197,29 @@ def alternate_path_v2(G : nx.Graph, terms, permutations):
     other_color = set()
 
     ret = []
-    while (len(Q) > 0):
+    # print(Q)
+    # print(list(G.nodes()))
+    # # exit(0)
+    made_progress = True
+    while len(Q) > 2 and made_progress:
+        made_progress = False
         for (u,v) in Q:
             for H in [u,v]:
+                # print(H)
                 if H.parent not in other_color:
                     ret.append(H)
                     other_color.add(H.parent)
-            G.remove_node((u,v))
+                for w in list(G.nodes()):
+                    if H in w:
+                        G.remove_node(w)
+                        made_progress = True
+                    # print(w)
         T, _ = sample_path(G, terms)
-        Q = get_Diameter(T)
-
+        if T.number_of_edges() > 1:
+            Q = get_Diameter(T)
+        else:
+            break
+        # Q = [ ]
 
     last_base = None
     print(T.number_of_edges())
@@ -265,7 +252,7 @@ if __name__ == "__main__":
 
 
     # circuit = QuantumCircuit(10)
-    G, terms, permus = generated_the_product_graph(num_of_terms=70) 
+    G, terms, permus = generated_the_product_graph(num_of_terms=40) 
 
     # pos = nx.spring_layout(G, seed=50)
 
@@ -276,7 +263,7 @@ if __name__ == "__main__":
     for term in sorted(terms, key=lambda x : "".join(x.tensor)):
         print("".join(term.tensor))
     canidates = [ ]
-    for _ in range(3):    
+    for _ in range(10):    
         path, terms = alternate_path_v2(deepcopy(G), terms, permus)
         circuit = genreate_circut(path)
         depth = genreate_optimzed_circut(circuit, terms)
