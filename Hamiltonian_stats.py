@@ -9,7 +9,7 @@ from Hamiltonian_parser import parser
 def majority_base():
     _str = open(PATHFILE).read()
     X,Y,Z,I =  (_str.count(c) for c in ["I", "X", "Z", "Y"])
-    print( f"stats:\n\tI:{I}\n\tX : {X}\n\tY : {Y}\n\tZ: {Z}")
+    print( f"stats:\n\tI:{I}, {I/(X+Y+Z+I)} \n\tX : {X}, {X/(X+Y+Z+I)}\n\tY : {Y}, {Y/(X+Y+Z+I)}\n\tZ: {Z}, {Z/(X+Y+Z+I)}")
 
 def _majority_base():
     terms = parser()
@@ -35,4 +35,4 @@ def _majority_base():
 
 
 if __name__ == "__main__":
-    _majority_base() 
+    majority_base() 
