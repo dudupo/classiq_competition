@@ -210,9 +210,10 @@ def greedy_path( terms ):
     return reqursive_form(terms)
 
 def Hamiltonian_sorting(hamiltonians):
-    groups = [[] for _ in range(WIRES)]
+    groups = [[] for _ in product(range(WIRES),range(WIRES))]
     for term in hamiltonians:
-        groups[ term.median() ].append(term)
+        x,y = term.seconed_wires() 
+        groups[x + WIRES*y].append(term)
     
     ret = [ ]
     for group in groups:
@@ -328,42 +329,28 @@ def compose_alternate_enforce():
             canidates.append( (depth, circuit) )
             print(f"DEPTH: {depth}")
         depth, circuit =  min( canidates, key = lambda x : x[0] )
-        depth = genreate_optimzed_circut(circuit, terms, entire=True)
+        depth = genreate_optimzed_circut(circuit, terms, svg = False, entire=True)        
+        # depth = genreate_optimzed_circut(circuit, terms, entire=True)
         return circuit,terms 
             
 
     
+
+def demonstrate_fig( ):
+    path = [ local_Hamiltonian( "XIXZZIIIII", 0.5 ),
+      local_Hamiltonian( "XXXZIIIIII", 0.5 ),
+      local_Hamiltonian( "IIIIIIXXZX", 0.5 ),
+      local_Hamiltonian( "IIIIIIZIZX", 0.5 ),
+      local_Hamiltonian( "IIIXIIZIZX", 0.5 ) ] 
+    
+    path, terms = enforce_seapration(path)
+    circuit =  genreate_circut(path)
+    genreate_optimzed_circut(circuit ,path, svg=True, entire=False) 
         
 
 if __name__ == "__main__":
 
     circuit, terms  = compose_alternate_enforce()
-    genreate_optimzed_circut(circuit, terms, svg = True, entire=False )
-
-    exit(0)
-
-    # alternate_path_v2()
 
 
-    # circuit = QuantumCircuit(10)
-    G, mainProductG, terms, permus = generated_the_product_graph(num_of_terms=80) 
-    # hamiltonians = parser()
-    # pos = nx.spring_layout(G, seed=50)
-
-    # nx.draw_networkx_nodes(G, pos)
-    # nx.draw_networkx_edges(G, pos)
-    # plt.show()
-
-    # for term in terms:#_list[:10]:
-    #     print("".join(term.tensor))
-
-    # print(beneath[:3])
-    
-    
-    # # terms = shuffle(terms)
-    # T = nx.Graph()
-    # for term in terms:
-    #     if term not in color:
-    #         color.add(term)
-    #         select filter(lambda x : (x not in color) and (len(G.adj[(term, x)]) > 0) , terms):
-    #             if G.adj[(term,  )]
+ 

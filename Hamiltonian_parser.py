@@ -1,11 +1,12 @@
 
 from importlib.resources import path
 from math import ceil
-from tkinter.tix import Tree
+from struct import unpack
 from qiskit import  QuantumCircuit
 from qiskit.visualization import circuit_drawer
 from matplotlib import pyplot as plt
 import datetime
+import numpy as np
 
 N                       = 4
 WIRES                   = 10
@@ -65,6 +66,29 @@ class local_Hamiltonian():
         if len(support) != 0:
             return support[int(len(support)/2)] 
         return 0
+    
+    def seconed_wires(self):
+        j = self.median()
+        
+        def find_nearset_nontrival(sign):
+            
+            
+            gen = [ (i,v) for i,v in list(enumerate(self.tensor))[j+1:]] if sign ==1\
+                 else [ (i,v) for i,v in list(enumerate(self.tensor))[j-1::-1]]
+
+            for i,v in gen:
+                if v != "I":
+                    return i
+            return j
+
+        pos_wire = j 
+        neg_wire = j
+        if j + 1 < WIRES:
+            pos_wire = find_nearset_nontrival(1)
+        if j - 1 >= 0:
+            neg_wire = find_nearset_nontrival(-1)
+
+        return neg_wire, pos_wire
 
 def parser_line(line) -> local_Hamiltonian:
     line  = line.split()
@@ -132,23 +156,25 @@ def MulByterm (circuit : QuantumCircuit, term ,next_terms = [], last_terms =  []
         if pauli == 'I':
             
             
-            temp_wire = last_wire + _sign if first_not_trival else last_wire
+            # temp_wire = last_wire + _sign if first_not_trival else last_wire
             return reqursive_manner(tensor, wire + _sign, weight,
-             last_wire, _sign, first_not_trival = True)
+             last_wire, _sign, first_not_trival = first_not_trival)
             
         else:
+
+            temp_wire = wire if first_not_trival else last_wire
             parity_collector = False
             if first_not_trival:
                 parity_collector = True
+                
  
-            L, R = reqursive_manner(tensor, wire + _sign, weight, main_wire + _sign , _sign, first_not_trival = False)
+            L, R = reqursive_manner(tensor, wire + _sign, weight, temp_wire, _sign, first_not_trival = False)
             circuit_left, circuit_right = QuantumCircuit(WIRES),QuantumCircuit(WIRES)
             
             if (parity_collector) or not (\
                  (last_terms[wire][0] == pauli) and\
-                  (last_terms[wire][1] == main_wire)):
+                  (last_terms[wire][1][ { 1 : 1 , -1 : 0  }[_sign] ] == last_wire)):
 
-            
                 compute[pauli](circuit_left)(wire)
                 circuit_left = circuit_left.compose(L)
                 circuit_left.cx(wire, last_wire)
@@ -158,7 +184,7 @@ def MulByterm (circuit : QuantumCircuit, term ,next_terms = [], last_terms =  []
 
             if  (parity_collector) or not (
                  (next_terms[wire][0] == pauli) and\
-                  (next_terms[wire][1] == main_wire)):
+                  (next_terms[wire][1][ { 1 : 1 , -1 : 0  }[_sign] ] == last_wire)):
             
                 circuit_right.cx(wire, last_wire)
                 circuit_right = circuit_right.compose(R)
@@ -219,7 +245,7 @@ def genreate_circut(terms = None):
             if i+1 < len(terms):
                 for _term in terms[i+1:]: 
                     if _term.tensor[_j] != 'I':
-                        next_terms.append( (_term.tensor[_j], _term.median() ))
+                        next_terms.append( (_term.tensor[_j], _term.seconed_wires() ))
                         found = True     
                         break 
             if not found:
@@ -227,9 +253,9 @@ def genreate_circut(terms = None):
             
             found = False
             if i > 0:
-                for _term in reversed(terms[i-1:]): 
+                for _term in terms[i-1::-1]: 
                     if _term.tensor[_j] != 'I':
-                        last_terms.append( (_term.tensor[_j], _term.median() ))
+                        last_terms.append( (_term.tensor[_j], _term.seconed_wires() ))
                         found = True
                         break      
             if not found:
@@ -253,6 +279,7 @@ def genreate_optimzed_circut(circuit, terms, svg =False, entire = False):
     if svg:
         circuit_drawer(circuit, output='mpl',style="bw", fold=-1)
         plt.title( f"TERMS: {len(terms)}, DEPTH:{circuit.depth()}")
+        plt.tight_layout()
         plt.savefig(f'Ham_{STRATEGY}-{datetime.datetime.now()}.svg')
     
     if entire:
@@ -262,8 +289,3 @@ def genreate_optimzed_circut(circuit, terms, svg =False, entire = False):
 
 
 
-
-if __name__  == "__main__":
-    path = [ local_Hamiltonian( "XIXZZXIXXZ", 0.5 ),  local_Hamiltonian( "XIXXZXIXXZ", 0.5 ) ] 
-    circuit =  genreate_circut(path)
-    genreate_optimzed_circut(circuit ,path, svg=True, entire=False)
